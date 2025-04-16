@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import math
 import logging
+import base64
 from io import BytesIO
 from datetime import datetime
 
@@ -23,22 +24,60 @@ st.set_page_config(
     layout="wide"
 )
 
-st.markdown(
-    """
-    <style>
-    .stTitle {
-        margin-top: -20px;  /* Adjust this value to reduce or increase the spacing */
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+def add_bg_from_local():
+    with open("freedom-17747.gif", "rb") as f:
+        data = base64.b64encode(f.read()).decode("utf-8")
+    
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url("data:image/gif;base64,{data}");
+            background-size: cover;
+            background-position: center;
+            background-repeat: repeat;
+        }}
+        /* Cải thiện độ tương phản của văn bản trên nền */
+        .stMarkdown, .stHeader, h1, h2, h3 {{
+            color: white;
+            text-shadow: 0px 0px 3px rgba(0,0,0,0.9);
+        }}
+        /* Làm cho các widget có nền mờ để dễ đọc và bo tròn góc */
+        .stTextInput, .stFileUploader, .stDataFrame, .stAlert {{
+            background-color: rgba(255, 255, 255, 0.85) !important;
+            border-radius: 10px !important;
+            padding: 10px !important;
+        }}
+        /* Styling for buttons */
+        .stButton > button {{
+            border-radius: 10px !important;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }}
+        /* Fix button container to not extend full width */
+        .stButton {{
+            display: inline-block !important;
+            background-color: transparent !important;
+        }}
+        /* Container for button to center it */
+        div[data-testid="stHorizontalBlock"] {{
+            background-color: transparent !important;
+        }}
+        /* Make all containers transparent */
+        div.block-container {{
+            background-color: transparent !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Gọi hàm để thêm ảnh nền
+add_bg_from_local()
 
 # Add a logo next to the title
 col1, col2 = st.columns([1, 10])
 with col1:
     # Use HTML to display the animated GIF with a hyperlink
-    import base64
     with open("linkedin.gif", "rb") as f:
         data = base64.b64encode(f.read()).decode("utf-8")
     
@@ -51,7 +90,14 @@ with col1:
         unsafe_allow_html=True,
     )
 with col2:
-    st.title("POSM Cost Calculator App")
+    st.markdown(
+        """
+        <h1 style="color: #FFD700; text-shadow: 0px 0px 3px rgba(0,0,0,0.9); font-weight: bold;">
+        POSM Cost Calculator App
+        </h1>
+        """,
+        unsafe_allow_html=True
+    )
 
 st.info("Upload the required Excel files below to calculate POSM costs and allocations.")
 
@@ -143,3 +189,4 @@ if st.button("🚀 Calculate Report", type="primary"):
 
 st.markdown("---")
 st.caption("Developed by Phước ADMIN | [LinkedIn](https://www.linkedin.com/in/phuoctran1996) | 2025")
+st.caption("This app is designed to help you calculate POSM costs and allocations efficiently. If you have any questions or feedback, please reach out!")
