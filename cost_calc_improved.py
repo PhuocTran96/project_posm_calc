@@ -217,7 +217,7 @@ def calculate_posm_report(fact_display, dim_storelist, dim_model, dim_posm, pric
             total_qty = group['quantity'].sum()
             
             # Apply priority rules
-            adjusted_qty = apply_quantity_rules(total_qty, priority)
+            adjusted_qty = math.ceil(total_qty / 5) * 5
             
             province_posm_qty_list.append({
                 'Province': province,
