@@ -1,5 +1,2 @@
-pandas
-numpy
+# This file contains the list of required packages for the project.
 openpyxl
-io
-datetime
