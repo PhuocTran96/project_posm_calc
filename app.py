@@ -37,7 +37,17 @@ st.markdown(
 # Add a logo next to the title
 col1, col2 = st.columns([1, 10])
 with col1:
-    st.image("https://res.cloudinary.com/dwnnet2w1/image/upload/v1744772802/logo-blue-2022_cd9wmm.png", width=80)  # Replace with the path to your logo file
+    # Use HTML to display the animated GIF
+    import base64
+    with open("linkedin.gif", "rb") as f:
+        data = base64.b64encode(f.read()).decode("utf-8")
+    
+    st.markdown(
+        f"""
+        <img src="data:image/gif;base64,{data}" width="80">
+        """,
+        unsafe_allow_html=True,
+    )
 with col2:
     st.title("POSM Cost Calculator App")
 
