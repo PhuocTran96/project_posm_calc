@@ -37,14 +37,16 @@ st.markdown(
 # Add a logo next to the title
 col1, col2 = st.columns([1, 10])
 with col1:
-    # Use HTML to display the animated GIF
+    # Use HTML to display the animated GIF with a hyperlink
     import base64
     with open("linkedin.gif", "rb") as f:
         data = base64.b64encode(f.read()).decode("utf-8")
     
     st.markdown(
         f"""
-        <img src="data:image/gif;base64,{data}" width="80">
+        <a href="https://www.linkedin.com/in/phuoctran1996" target="_blank">
+            <img src="data:image/gif;base64,{data}" width="80">
+        </a>
         """,
         unsafe_allow_html=True,
     )
