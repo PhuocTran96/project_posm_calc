@@ -33,19 +33,28 @@ def load_data():
         logging.error(f"Error loading data: {e}")
         raise
 
-def apply_buffer_and_minimum(qty):
-    """Apply buffer and enforce minimum quantity."""
-    return max(
-        # Add buffer and round up to next 10
-        math.ceil((qty * BUFFER_MULTIPLIER) / 10) * 10,
-        # Ensure minimum quantity
-        MINIMUM_QUANTITY
-    )
+def apply_quantity_rules(qty, priority):
+    """
+    Apply different quantity rules based on priority:
+    - Priority 1: Apply buffer and enforce minimum quantity
+    - Priority 2: Only round up to next multiple of 5
+    """
+    if priority == 1:
+        # Apply buffer and enforce minimum quantity
+        return max(
+            # Add buffer and round up to next 10
+            math.ceil((qty * BUFFER_MULTIPLIER) / 10) * 10,
+            # Ensure minimum quantity
+            MINIMUM_QUANTITY
+        )
+    else:  # priority == 2
+        # Only round up to next multiple of 5
+        return math.ceil(qty / 5) * 5
 
 def get_price_range(quantity):
     """Determine the price range for a given quantity."""
     for min_val, max_val, range_name in PRICE_RANGES:
-        if quantity <= max_val:
+        if min_val <= quantity <= max_val:
             return range_name
     return PRICE_RANGES[-1][2]  # Return the highest range if no match
 
@@ -107,17 +116,51 @@ def calculate_posm_report(fact_display, dim_storelist, dim_model, dim_posm, pric
         # Calculate total quantity by model
         model_quantity = fact_display.groupby('model')['quantity'].sum().reset_index()
         
+        # Add priority information from dim_model
+        model_quantity_with_priority = pd.merge(
+            model_quantity,
+            dim_model[['model', 'priority']],
+            on='model',
+            how='left'
+        )
+        
         # Merge model quantities with POSM requirements
         model_posm = pd.merge(
-            model_quantity,
+            model_quantity_with_priority,
             dim_posm,
             on='model',
             how='left'
         )
         
-        # Calculate total quantity needed for each POSM type
-        posm_by_model = model_posm.copy()
-        posm_quantity = posm_by_model.groupby('posm')['quantity'].sum().reset_index()
+        # Group by POSM and priority to calculate quantities separately
+        posm_by_priority = model_posm.groupby(['posm', 'priority'])['quantity'].sum().reset_index()
+        
+        # Create a temporary dataframe to store the results
+        posm_quantity_list = []
+        
+        # Process each POSM type
+        for posm_type in posm_by_priority['posm'].unique():
+            # Get data for this POSM type
+            posm_data = posm_by_priority[posm_by_priority['posm'] == posm_type]
+            
+            # Calculate total original quantity for this POSM
+            original_quantity = posm_data['quantity'].sum()
+            
+            # Calculate adjusted quantity based on priority rules
+            adjusted_quantity = 0
+            for _, row in posm_data.iterrows():
+                priority = row['priority']
+                qty = row['quantity']
+                adjusted_quantity += apply_quantity_rules(qty, priority)
+            
+            posm_quantity_list.append({
+                'posm': posm_type,
+                'original_quantity': original_quantity,
+                'quantity': adjusted_quantity
+            })
+        
+        # Convert to DataFrame
+        posm_quantity = pd.DataFrame(posm_quantity_list)
         
         # Get POSM names
         dim_posm_unique = price_posm.drop_duplicates(subset=['posm'])
@@ -127,11 +170,7 @@ def calculate_posm_report(fact_display, dim_storelist, dim_model, dim_posm, pric
             on='posm',
             how='left'
         )
-        posm_quantity = posm_quantity[['posm', 'name', 'quantity']]
-        
-        # Save original quantities and apply buffer
-        posm_quantity['original_quantity'] = posm_quantity['quantity']
-        posm_quantity['quantity'] = posm_quantity['quantity'].apply(apply_buffer_and_minimum)
+        posm_quantity = posm_quantity[['posm', 'name', 'original_quantity', 'quantity']]
         
         # Get model information
         model_info = pd.merge(
@@ -153,6 +192,14 @@ def calculate_posm_report(fact_display, dim_storelist, dim_model, dim_posm, pric
         # Calculate total POSM needed by province and model
         province_model_qty = display_with_store.groupby(['Province', 'model'])['quantity'].sum().reset_index()
         
+        # Add priority information to province_model_qty
+        province_model_qty = pd.merge(
+            province_model_qty,
+            dim_model[['model', 'priority']],
+            on='model',
+            how='left'
+        )
+        
         # Merge with POSM requirements to get POSM needed by province
         province_posm = pd.merge(
             province_model_qty,
@@ -161,8 +208,33 @@ def calculate_posm_report(fact_display, dim_storelist, dim_model, dim_posm, pric
             how='left'
         )
         
-        # Calculate total POSM needed by province
-        province_posm_qty = province_posm.groupby(['Province', 'posm'])['quantity'].sum().reset_index()
+        # Calculate total POSM needed by province, taking priority into account
+        province_posm_qty_list = []
+        
+        # Group by province, posm, and priority
+        for (province, posm_type, priority), group in province_posm.groupby(['Province', 'posm', 'priority']):
+            # Calculate total quantity for this group
+            total_qty = group['quantity'].sum()
+            
+            # Apply priority rules
+            adjusted_qty = apply_quantity_rules(total_qty, priority)
+            
+            province_posm_qty_list.append({
+                'Province': province,
+                'posm': posm_type,
+                'priority': priority,
+                'original_quantity': total_qty,
+                'adjusted_quantity': adjusted_qty
+            })
+        
+        # Convert to DataFrame
+        province_posm_qty_priority = pd.DataFrame(province_posm_qty_list)
+        
+        # Aggregate by province and posm (combining different priorities)
+        province_posm_qty = province_posm_qty_priority.groupby(['Province', 'posm']).agg({
+            'original_quantity': 'sum',
+            'adjusted_quantity': 'sum'
+        }).reset_index()
         
         # First, calculate province allocations based on need
         province_summary_data = []
@@ -185,12 +257,13 @@ def calculate_posm_report(fact_display, dim_storelist, dim_model, dim_posm, pric
                 provinces_for_posm = province_posm_qty[province_posm_qty['posm'] == posm_type]
                 
                 # Calculate total quantity needed across all provinces
-                total_province_need = provinces_for_posm['quantity'].sum()
+                total_province_need = provinces_for_posm['original_quantity'].sum()
                 
                 # Calculate percentage distribution by province
                 for _, prov_row in provinces_for_posm.iterrows():
                     province = prov_row['Province']
-                    province_qty = prov_row['quantity']
+                    province_qty = prov_row['original_quantity']
+                    province_adjusted_qty = prov_row['adjusted_quantity']
                     
                     # Calculate percentage of total need
                     if total_province_need > 0:
@@ -198,9 +271,8 @@ def calculate_posm_report(fact_display, dim_storelist, dim_model, dim_posm, pric
                     else:
                         province_pct = 0
                     
-                    # Calculate initial allocation based on need percentage
-                    # Make sure it's rounded to the nearest multiple of 5
-                    province_allocation = math.ceil(province_qty / 5) * 5
+                    # Use the adjusted quantity for allocation
+                    province_allocation = province_adjusted_qty
                     
                     # Add to the total send quantity for this POSM type
                     posm_send_quantities[posm_type] += province_allocation
@@ -267,7 +339,6 @@ def calculate_posm_report(fact_display, dim_storelist, dim_model, dim_posm, pric
     except Exception as e:
         logging.error(f"Error during calculation: {e}")
         return None, None
-
 
 # Keep the main execution block for standalone script usage if needed
 def main():
