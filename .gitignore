@@ -1,3 +1,4 @@
 __pycache__/
-/.idea
+.idea/
 create_logo_animation.py
+asset/
