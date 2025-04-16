@@ -142,4 +142,4 @@ if st.button("🚀 Calculate Report", type="primary"):
         st.warning("⚠️ Please upload all required Excel files.")
 
 st.markdown("---")
-st.caption("Developed by Cline")
+st.caption("Developed by Phước ADMIN | [LinkedIn](https://www.linkedin.com/in/phuoctran1996) | 2025")
