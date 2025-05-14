@@ -25,7 +25,7 @@ st.set_page_config(
 )
 
 def add_bg_from_local():
-    with open("freedom-17747.gif", "rb") as f:
+    with open("bg.gif", "rb") as f:
         data = base64.b64encode(f.read()).decode("utf-8")
     
     st.markdown(
