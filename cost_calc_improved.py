@@ -60,50 +60,71 @@ def calculate_price(posm_type, quantity, price_df):
         return 0, 0
 
 def calculate_posm_report(fact_display_df, dim_storelist_df, dim_model_df, dim_posm_df, price_posm_df):
-    """Calculate POSM report with POSM summary and address-based summary."""
+    """Calculate POSM report with multiple summaries including Care and SDA categories."""
     try:
         logging.info("Starting POSM calculation...")
         
-        # Merge fact_display with storelist to get address information
+        # Merge all data sources
         merged_df = fact_display_df.merge(
             dim_storelist_df[['shop', 'Address']], 
             on='shop', 
             how='left'
-        )
-        
-        # Merge with model data to get priority
-        merged_df = merged_df.merge(
-            dim_model_df[['model', 'priority']], 
+        ).merge(
+            dim_model_df[['model', 'priority', 'subcategory']], 
             on='model', 
             how='left'
-        )
-        
-        # Merge with POSM data
-        merged_df = merged_df.merge(
+        ).merge(
             dim_posm_df[['model', 'posm']], 
             on='model', 
             how='left'
         )
-        
-        # Group by POSM and priority first
-        posm_grouped = merged_df.groupby(['posm', 'priority'])['quantity'].sum().reset_index()
-        
-        # Apply quantity rules cho tổng quantity của từng POSM
-        posm_grouped['adjusted_quantity'] = posm_grouped.apply(
+
+        # ================== POSM Summary ==================
+        # Bước 1: Group by posm và priority để áp dụng logic buffer
+        posm_priority_grouped = merged_df.groupby(['posm', 'priority'])['quantity'].sum().reset_index()
+        posm_priority_grouped['adjusted_quantity'] = posm_priority_grouped.apply(
             lambda row: apply_quantity_rules(row['quantity'], row['priority']), 
             axis=1
         )
         
+        # Bước 2: Group by chỉ theo posm (bỏ priority) để tính tổng cuối cùng
+        posm_final_grouped = posm_priority_grouped.groupby(['posm']).agg({
+            'quantity': 'sum',
+            'adjusted_quantity': 'sum'
+        }).reset_index()
+        
         # Calculate costs for POSM Summary
         posm_results = []
-        for _, row in posm_grouped.iterrows():
-            # Calculate original cost (based on original quantity)
+        for _, row in posm_final_grouped.iterrows():
             original_cost, original_unit_price = calculate_price(row['posm'], row['quantity'], price_posm_df)
-            
-            # Calculate adjusted cost (based on adjusted quantity)
             adjusted_cost, adjusted_unit_price = calculate_price(row['posm'], row['adjusted_quantity'], price_posm_df)
             
             posm_results.append({
+                'posm': row['posm'],
+                'original_quantity': row['quantity'],
+                'adjusted_quantity': row['adjusted_quantity'],
+                'original_price': original_unit_price,
+                'original_cost': original_cost,
+                'unit_price': adjusted_unit_price,
+                'total_cost': adjusted_cost
+            })
+        posm_summary_df = pd.DataFrame(posm_results)
+
+        # ================== Model-POSM Summary ==================
+        # SỬA: Sử dụng cùng logic group như POSM Summary để đảm bảo consistency
+        model_posm_grouped = merged_df.groupby(['model', 'posm', 'priority'])['quantity'].sum().reset_index()
+        model_posm_grouped['adjusted_quantity'] = model_posm_grouped.apply(
+            lambda row: apply_quantity_rules(row['quantity'], row['priority']), 
+            axis=1
+        )
+        
+        model_posm_results = []
+        for _, row in model_posm_grouped.iterrows():
+            original_cost, original_unit_price = calculate_price(row['posm'], row['quantity'], price_posm_df)
+            adjusted_cost, adjusted_unit_price = calculate_price(row['posm'], row['adjusted_quantity'], price_posm_df)
+            
+            model_posm_results.append({
+                'model': row['model'],
                 'posm': row['posm'],
                 'priority': row['priority'],
                 'original_quantity': row['quantity'],
@@ -113,27 +134,41 @@ def calculate_posm_report(fact_display_df, dim_storelist_df, dim_model_df, dim_p
                 'unit_price': adjusted_unit_price,
                 'total_cost': adjusted_cost
             })
-        
-        posm_summary_df = pd.DataFrame(posm_results)
-        
-        # Create address-based summary by POSM (chỉ dựa trên original quantity)
-        # Group by shop, posm và address để có thông tin chi tiết theo shop
-        shop_posm_grouped = merged_df.groupby(['shop', 'posm', 'Address'])['quantity'].sum().reset_index()
-        
-        # Group by address và posm để tạo address summary (chỉ tính tổng original quantity)
-        address_posm_summary = shop_posm_grouped.groupby(['Address', 'posm']).agg({
-            'quantity': 'sum'
-        }).reset_index()
-        
-        # Rename columns for clarity
-        address_posm_summary = address_posm_summary.rename(columns={
+        model_posm_summary_df = pd.DataFrame(model_posm_results)
+
+        # ================== Address Summary ==================
+        # SỬA: Sử dụng cùng base data để đảm bảo consistency
+        address_summary = merged_df.groupby(['Address', 'posm'])['quantity'].sum().reset_index()
+        address_summary = address_summary.rename(columns={
             'Address': 'address',
             'quantity': 'total_quantity'
         })
+
+        # ================== POSM by Care by Address ==================
+        care_subcat = ['Front Load', 'Dryer']
+        care_data = merged_df[merged_df['subcategory'].isin(care_subcat)]
         
+        care_summary = care_data.groupby(['Address', 'posm'])['quantity'].sum().reset_index()
+        care_summary = care_summary.rename(columns={
+            'Address': 'address',
+            'quantity': 'total_quantity'
+        })
+        care_summary['category'] = 'Care'
+
+        # ================== POSM by SDA by Address ==================
+        sda_data = merged_df[~merged_df['subcategory'].isin(care_subcat)]
+        
+        sda_summary = sda_data.groupby(['Address', 'posm'])['quantity'].sum().reset_index()
+        sda_summary = sda_summary.rename(columns={
+            'Address': 'address',
+            'quantity': 'total_quantity'
+        })
+        sda_summary['category'] = 'SDA'
+
         logging.info("POSM calculation completed successfully")
-        return posm_summary_df, address_posm_summary
+        return posm_summary_df, model_posm_summary_df, address_summary, care_summary, sda_summary
         
     except Exception as e:
         logging.error(f"Error in calculate_posm_report: {e}")
-        return None, None
+        return None, None, None, None, None
+

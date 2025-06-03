@@ -134,25 +134,37 @@ if st.button("🚀 Calculate Report", type="primary"):
 
             # Perform calculation using the imported function
             with st.spinner('Calculating report... Please wait.'):
-                posm_summary_df, address_summary_df = calculate_posm_report(
+                posm_summary_df, model_posm_summary_df, address_summary_df, care_summary_df, sda_summary_df = calculate_posm_report(
                     fact_display_df, dim_storelist_df, dim_model_df, dim_posm_df, price_posm_df
                 )
 
-            if posm_summary_df is not None and address_summary_df is not None:
+            if all(df is not None for df in [posm_summary_df, model_posm_summary_df, address_summary_df, care_summary_df, sda_summary_df]):
                 st.success("✅ Calculation Complete!")
 
                 # --- Display Results ---
                 st.subheader("📊 POSM Summary")
                 st.dataframe(posm_summary_df, use_container_width=True)
 
+                st.subheader("🔄 Model-POSM Summary")
+                st.dataframe(model_posm_summary_df, use_container_width=True)
+
                 st.subheader("📍 Address Summary by POSM")
                 st.dataframe(address_summary_df, use_container_width=True)
+
+                st.subheader("🏠 POSM by Care by Address")
+                st.dataframe(care_summary_df, use_container_width=True)
+
+                st.subheader("🏢 POSM by SDA by Address")
+                st.dataframe(sda_summary_df, use_container_width=True)
 
                 # --- Download Button ---
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     posm_summary_df.to_excel(writer, sheet_name='POSM Summary', index=False)
-                    address_summary_df.to_excel(writer, sheet_name='Address Summary by POSM', index=False)
+                    model_posm_summary_df.to_excel(writer, sheet_name='Model-POSM Summary', index=False)
+                    address_summary_df.to_excel(writer, sheet_name='Address Summary', index=False)
+                    care_summary_df.to_excel(writer, sheet_name='POSM by Care by Address', index=False)
+                    sda_summary_df.to_excel(writer, sheet_name='POSM by SDA by Address', index=False)
                 
                 output.seek(0) 
 
