@@ -6,16 +6,15 @@ import base64
 from io import BytesIO
 from datetime import datetime
 
-
 try:
     from cost_calc_improved import (
         calculate_posm_report,
     )
 except ImportError:
     st.error("Error: Could not import calculation logic from cost_calc_improved.py. Make sure the file exists in the same directory.")
-    st.stop() # Stop execution if import fails
+    st.stop()
 
-# Configure logging (optional for Streamlit, but good practice)
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 st.set_page_config(
@@ -37,32 +36,26 @@ def add_bg_from_local():
             background-position: center;
             background-repeat: repeat;
         }}
-        /* Cải thiện độ tương phản của văn bản trên nền */
         .stMarkdown, .stHeader, h1, h2, h3 {{
             color: white;
             text-shadow: 0px 0px 3px rgba(0,0,0,0.9);
         }}
-        /* Làm cho các widget có nền mờ để dễ đọc và bo tròn góc */
         .stTextInput, .stFileUploader, .stDataFrame, .stAlert {{
             background-color: rgba(255, 255, 255, 0.85) !important;
             border-radius: 10px !important;
             padding: 10px !important;
         }}
-        /* Styling for buttons */
         .stButton > button {{
             border-radius: 10px !important;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }}
-        /* Fix button container to not extend full width */
         .stButton {{
             display: inline-block !important;
             background-color: transparent !important;
         }}
-        /* Container for button to center it */
         div[data-testid="stHorizontalBlock"] {{
             background-color: transparent !important;
         }}
-        /* Make all containers transparent */
         div.block-container {{
             background-color: transparent !important;
         }}
@@ -77,7 +70,6 @@ add_bg_from_local()
 # Add a logo next to the title
 col1, col2 = st.columns([1, 10])
 with col1:
-    # Use HTML to display the animated GIF with a hyperlink
     with open("linkedin.gif", "rb") as f:
         data = base64.b64encode(f.read()).decode("utf-8")
     
@@ -117,13 +109,11 @@ with col4:
 
 # --- Calculation Trigger ---
 if st.button("🚀 Calculate Report", type="primary"):
-    # Check if all files are uploaded
     if uploaded_fact_display and uploaded_dim_storelist and uploaded_dim_model and uploaded_dim_posm:
         try:
             # Load data from uploaded files into DataFrames
             with st.spinner('Loading data...'):
                 fact_display_df = pd.read_excel(uploaded_fact_display)
-                # Ensure 'shop' column exists after renaming
                 dim_storelist_df = pd.read_excel(uploaded_dim_storelist)
                 if "Store name" in dim_storelist_df.columns:
                      dim_storelist_df = dim_storelist_df.rename(columns={"Store name": "shop"})
@@ -134,38 +124,36 @@ if st.button("🚀 Calculate Report", type="primary"):
                 dim_model_df = pd.read_excel(uploaded_dim_model)
 
                 # Read both sheets from dim_posm.xlsx
-                dim_posm_sheets = pd.read_excel(uploaded_dim_posm, sheet_name=None) # Read all sheets
+                dim_posm_sheets = pd.read_excel(uploaded_dim_posm, sheet_name=None)
                 dim_posm_df = dim_posm_sheets.get('posm')
                 price_posm_df = dim_posm_sheets.get('price')
 
                 if dim_posm_df is None or price_posm_df is None:
                     st.error("Error: 'dim_posm.xlsx' must contain both 'posm' and 'price' sheets.")
-                    st.stop() # Stop if sheets are missing
+                    st.stop()
 
             # Perform calculation using the imported function
             with st.spinner('Calculating report... Please wait.'):
-                final_df, province_summary_df = calculate_posm_report(
+                posm_summary_df, address_summary_df = calculate_posm_report(
                     fact_display_df, dim_storelist_df, dim_model_df, dim_posm_df, price_posm_df
                 )
 
-            if final_df is not None and province_summary_df is not None:
+            if posm_summary_df is not None and address_summary_df is not None:
                 st.success("✅ Calculation Complete!")
 
                 # --- Display Results ---
-                st.subheader("POSM Summary")
-                st.dataframe(final_df)
+                st.subheader("📊 POSM Summary")
+                st.dataframe(posm_summary_df, use_container_width=True)
 
-                st.subheader("Province Summary")
-                st.dataframe(province_summary_df)
+                st.subheader("📍 Address Summary by POSM")
+                st.dataframe(address_summary_df, use_container_width=True)
 
                 # --- Download Button ---
-                # Create an in-memory Excel file
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    final_df.to_excel(writer, sheet_name='POSM Summary', index=False)
-                    province_summary_df.to_excel(writer, sheet_name='Province Summary', index=False)
+                    posm_summary_df.to_excel(writer, sheet_name='POSM Summary', index=False)
+                    address_summary_df.to_excel(writer, sheet_name='Address Summary by POSM', index=False)
                 
-                # Important: Seek back to the beginning of the stream
                 output.seek(0) 
 
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
