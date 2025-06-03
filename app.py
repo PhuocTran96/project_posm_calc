@@ -5,6 +5,7 @@ import logging
 import base64
 from io import BytesIO
 from datetime import datetime
+import os
 
 try:
     from cost_calc_improved import (
@@ -190,3 +191,34 @@ if st.button("🚀 Calculate Report", type="primary"):
 st.markdown("---")
 st.caption("Developed by Phước ADMIN | [LinkedIn](https://www.linkedin.com/in/phuoctran1996) | 2025")
 st.caption("This app is designed to help you calculate POSM costs and allocations efficiently. If you have any questions or feedback, please reach out!")
+
+# Thêm mục hướng dẫn sử dụng vào sidebar
+with st.sidebar:
+    st.markdown("## 📖 Hướng dẫn sử dụng")
+    readme_path = os.path.join(os.path.dirname(__file__), "readme.md")
+    try:
+        with open(readme_path, "r", encoding="utf-8") as f:
+            readme_content = f.read()
+        # Thêm CSS để đổi màu chữ và nền cho phần readme
+        st.markdown(
+            """
+            <style>
+            .sidebar-readme {
+                color: #222 !important;
+                background: #f7f7f7 !important;
+                padding: 16px;
+                border-radius: 8px;
+                font-size: 15px;
+                line-height: 1.6;
+                text-shadow: none !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        st.markdown(
+            f'<div class="sidebar-readme">{readme_content}</div>',
+            unsafe_allow_html=True
+        )
+    except Exception as e:
+        st.info("Không thể tải file hướng dẫn sử dụng (readme.md).")
